@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Video to Handwritten Notes Generator</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Rough.js for Hand-drawn Diagrams -->
+  <script src="https://unpkg.com/roughjs@latest/bundled/rough.js"></script>
+  <!-- Google Handwritten Fonts (Supports English & Devanagari/Hindi) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Kalam:wght@400;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+
+  <style>
+    .font-kalam { font-family: 'Kalam', cursive; }
+    .font-caveat { font-family: 'Caveat', cursive; }
+    .font-patrick { font-family: 'Patrick Hand', cursive; }
+
+    /* Paper Pattern Backgrounds */
+    .paper-grid {
+      background-color: #fdfbf7;
+      background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+    .paper-lined {
+      background-color: #fdfbf7;
+      background-image: linear-gradient(#e2e8f0 1px, transparent 1px);
+      background-size: 100% 28px;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur px-6 py-4 flex justify-between items-center sticky top-0 z-50">
+    <div class="flex items-center gap-3">
+      <div class="bg-indigo-600 text-white p-2 rounded-lg font-bold text-xl font-kalam">📝</div>
+      <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+        VideoNote AI <span class="text-xs text-indigo-400 font-normal border border-indigo-500/30 px-2 py-0.5 rounded-full">Live Cloud</span>
+      </h1>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+    
+    <!-- Left Column: Input Controls -->
+    <section class="lg:col-span-4 flex flex-col gap-6">
+      
+      <!-- Video Input Card -->
+      <div class="bg-slate-800/80 border border-slate-700/60 rounded-xl p-5 shadow-xl">
+        <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
+          <span>🔗</span> Video Link
+        </h2>
+        <div class="space-y-4">
+          <div>
+            <label class="text-xs font-medium text-slate-400">YouTube or Video URL</label>
+            <input id="videoUrl" type="url" placeholder="https://www.youtube.com/watch?v=..." 
+                   value="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                   class="w-full mt-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-medium text-slate-400">Notes Language</label>
+              <select id="langSelect" class="w-full mt-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="en">English</option>
+                <option value="hi">Hindi (हिंदी)</option>
+                <option value="hinglish">Hinglish</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs font-medium text-slate-400">Handwriting Font</label>
+              <select id="fontSelect" class="w-full mt-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="font-kalam">Kalam (Recommended)</option>
+                <option value="font-caveat">Caveat (Cursive)</option>
+                <option value="font-patrick">Patrick Hand</option>
+              </select>
+            </div>
+          </div>
+
+          <button id="generateBtn" onclick="runPipeline()" 
+                  class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-semibold rounded-lg shadow-lg shadow-indigo-600/30 transition flex justify-center items-center gap-2">
+            <span>✨ Convert Video to Notes</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Theme & Customization -->
+      <div class="bg-slate-800/80 border border-slate-700/60 rounded-xl p-5 shadow-xl space-y-4">
+        <h2 class="text-lg font-semibold flex items-center gap-2">
+          <span>🎨</span> Styling & Palette
+        </h2>
+
+        <div>
+          <label class="text-xs font-medium text-slate-400">Paper Style</label>
+          <div class="grid grid-cols-2 gap-2 mt-1">
+            <button onclick="setPaper('paper-grid')" class="px-3 py-1.5 border border-slate-700 rounded-lg text-xs bg-slate-900 hover:border-slate-500">Grid Paper</button>
+            <button onclick="setPaper('paper-lined')" class="px-3 py-1.5 border border-slate-700 rounded-lg text-xs bg-slate-900 hover:border-slate-500">Lined Paper</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-medium text-slate-400">Ink Color Palette</label>
+          <div class="flex gap-3 mt-2">
+            <button onclick="setTheme('classic')" class="flex-1 py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-900 text-blue-400">Classic Blue</button>
+            <button onclick="setTheme('notebook')" class="flex-1 py-2 rounded-lg text-xs font-bold border border-slate-700 bg-slate-900 text-red-400">Multi Ink</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pipeline Status Log -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-400 space-y-2">
+        <div class="text-slate-500 uppercase tracking-wider text-[10px] font-bold">Pipeline Status Log</div>
+        <div id="statusLog" class="h-28 overflow-y-auto space-y-1 text-slate-300">
+          <p class="text-slate-500">> Ready to connect to Railway backend.</p>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Right Column: Interactive Canvas / Output Paper -->
+    <section class="lg:col-span-8 flex flex-col">
+      <div class="flex justify-between items-center mb-3">
+        <span class="text-sm font-medium text-slate-400">Rendered Handwritten Page</span>
+        <button onclick="window.print()" class="text-xs px-3 py-1.5 bg-slate-800 border border-slate-700 hover:bg-slate-700 rounded-md text-slate-300 flex items-center gap-1">
+          <span>🖨️</span> Export PDF / Print
+        </button>
+      </div>
+
+      <!-- Digital Notebook Paper Container -->
+      <div id="paperCanvas" class="paper-grid border border-slate-300 rounded-xl p-6 sm:p-12 text-slate-800 shadow-2xl min-h-[650px] font-kalam transition-all duration-300 relative overflow-x-hidden">
+        
+        <!-- Red Left Margin Line (Classroom Notebook Style) -->
+        <div class="absolute left-6 sm:left-12 top-0 bottom-0 w-[2px] bg-red-300/80"></div>
+
+        <!-- Rendered Notes Container -->
+        <div id="notesContainer" class="pl-4 sm:pl-8 space-y-6">
+          
+          <!-- Title Section -->
+          <div class="border-b-2 border-indigo-400 pb-2">
+            <h1 id="noteTitle" class="text-2xl sm:text-4xl font-bold text-blue-900">
+              Photosynthesis & Plant Energy
+            </h1>
+            <p id="noteMeta" class="text-xs text-slate-500 mt-1">Topic 01 • Source Video Extract • Timestamp: Live</p>
+          </div>
+
+          <!-- Section 1 -->
+          <div>
+            <h2 id="sec1Title" class="text-lg sm:text-2xl font-bold text-red-700">1. Core Mechanism (मुख्य प्रक्रिया)</h2>
+            <p id="sec1Body" class="text-sm sm:text-lg text-slate-800 mt-1 leading-relaxed">
+              Plants convert light energy from the sun into chemical energy stored in glucose molecules.
+            </p>
+            <ul id="sec1Points" class="list-disc list-inside mt-2 space-y-1 text-slate-800 text-sm sm:text-lg">
+              <li><strong>Light Reaction:</strong> Water splits into oxygen & hydrogen ions.</li>
+              <li><strong>Dark Reaction:</strong> Carbon dioxide converts into sugar.</li>
+            </ul>
+          </div>
+
+          <!-- Dynamic Hand-Drawn Diagram Area -->
+          <div class="my-4 p-3 sm:p-4 rounded-lg border border-slate-300/60 bg-white/40 shadow-sm flex flex-col items-center overflow-x-auto">
+            <span class="text-xs font-sans text-slate-400 self-start mb-2">⚡ Hand-drawn Relation Diagram (Rough.js)</span>
+            <canvas id="diagramCanvas" width="550" height="200" class="max-w-full"></canvas>
+          </div>
+
+          <!-- Section 2: Injected AI Insights -->
+          <div id="aiInsightBox" class="p-3 sm:p-4 bg-yellow-100/60 border-l-4 border-amber-500 rounded-r-lg">
+            <h3 class="text-base sm:text-lg font-bold text-amber-900 flex items-center gap-2">
+              <span>💡</span> AI Additional Context (Smart Insight)
+            </h3>
+            <p id="aiInsightText" class="text-xs sm:text-base text-amber-950 mt-1">
+              Chlorophyll primarily absorbs blue and red wavelengths while reflecting green light back!
+            </p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Logger Utility
+    function logStep(msg) {
+      const log = document.getElementById("statusLog");
+      const time = new Date().toLocaleTimeString();
+      log.innerHTML += `<p><span class="text-indigo-400">[${time}]</span> ${msg}</p>`;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // Rough.js Hand-Drawn Diagram Generator
+    function drawDiagram(labels) {
+      const canvas = document.getElementById("diagramCanvas");
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const rc = rough.canvas(canvas);
+      const label1 = labels && labels[0] ? labels[0] : "Step 1";
+      const label2 = labels && labels[1] ? labels[1] : "Step 2";
+      const label3 = labels && labels[2] ? labels[2] : "Step 3";
+
+      // Node 1
+      rc.rectangle(20, 70, 140, 60, { fill: "#fef08a", roughness: 2, fillWeight: 1 });
+      ctx.font = "18px Kalam";
+      ctx.fillStyle = "#1e293b";
+      ctx.fillText(label1, 35, 105);
+
+      // Arrow 1
+      rc.line(165, 100, 240, 100, { stroke: "#2563eb", strokeWidth: 2, roughness: 1.5 });
+      rc.line(225, 90, 240, 100, { stroke: "#2563eb", strokeWidth: 2 });
+      rc.line(225, 110, 240, 100, { stroke: "#2563eb", strokeWidth: 2 });
+
+      // Node 2 (Circle)
+      rc.ellipse(310, 100, 130, 80, { fill: "#bbf7d0", roughness: 2 });
+      ctx.fillText(label2, 260, 105);
+
+      // Arrow 2
+      rc.line(380, 100, 440, 100, { stroke: "#dc2626", strokeWidth: 2, roughness: 1.5 });
+      rc.line(425, 90, 440, 100, { stroke: "#dc2626", strokeWidth: 2 });
+      rc.line(425, 110, 440, 100, { stroke: "#dc2626", strokeWidth: 2 });
+
+      // Node 3
+      rc.rectangle(450, 70, 130, 60, { fill: "#fed7aa", roughness: 1.8 });
+      ctx.fillText(label3, 460, 105);
+    }
+
+    // LIVE PIPELINE FUNCTION (Connected to Railway Backend)
+    async function runPipeline() {
+      const url = document.getElementById("videoUrl").value;
+      const lang = document.getElementById("langSelect").value;
+      const btn = document.getElementById("generateBtn");
+
+      if (!url) {
+        alert("Please paste a valid YouTube or video URL!");
+        return;
+      }
+
+      // Live Railway Backend Domain
+      const BACKEND_URL = "https://video-notes-app-production.up.railway.app/api/convert";
+
+      btn.disabled = true;
+      btn.classList.add("opacity-50");
+      logStep("Sending video to Railway cloud server...");
+
+      try {
+        const response = await fetch(BACKEND_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: url, language: lang })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server returned status ${response.status}`);
+        }
+
+        logStep("Processing Whisper transcript & Gemini AI notes...");
+        const result = await response.json();
+        const data = JSON.parse(result.data);
+
+        // Update UI
+        document.getElementById("noteTitle").innerText = data.title;
+        document.getElementById("sec1Title").innerText = data.sec1Title;
+        document.getElementById("sec1Body").innerText = data.sec1Body;
+
+        const pointsList = document.getElementById("sec1Points");
+        pointsList.innerHTML = "";
+        data.points.forEach(p => {
+          const li = document.createElement("li");
+          li.innerText = p;
+          pointsList.appendChild(li);
+        });
+
+        document.getElementById("aiInsightText").innerText = data.aiInsight;
+        drawDiagram(data.diagramLabels);
+
+        logStep("✨ Real video transcribed & handwritten notes generated!");
+      } catch (error) {
+        logStep(`❌ Error: ${error.message}`);
+        alert("Failed to process video: " + error.message);
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove("opacity-50");
+      }
+    }
+
+    // Customization Handlers
+    function setPaper(styleClass) {
+      const paper = document.getElementById("paperCanvas");
+      paper.className = paper.className.replace(/paper-\w+/g, styleClass);
+    }
+
+    function setTheme(theme) {
+      const title = document.getElementById("noteTitle");
+      const sec1Title = document.getElementById("sec1Title");
+
+      if (theme === 'classic') {
+        title.className = "text-2xl sm:text-4xl font-bold text-blue-900";
+        sec1Title.className = "text-lg sm:text-2xl font-bold text-blue-800";
+      } else {
+        title.className = "text-2xl sm:text-4xl font-bold text-purple-900";
+        sec1Title.className = "text-lg sm:text-2xl font-bold text-red-700";
+      }
+    }
+
+    document.getElementById("fontSelect").addEventListener("change", (e) => {
+      const canvas = document.getElementById("paperCanvas");
+      canvas.classList.remove("font-kalam", "font-caveat", "font-patrick");
+      canvas.classList.add(e.target.value);
+    });
+
+    window.onload = () => {
+      drawDiagram(["Sunlight", "Chloroplast", "Glucose"]);
+    };
+  </script>
+</body>
+</html>
