@@ -1,0 +1,6 @@
+fastapi[standard]
+uvicorn
+yt-dlp
+openai-whisper
+google-genai
+pydantic
