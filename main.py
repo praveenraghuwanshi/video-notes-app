@@ -45,7 +45,7 @@ async def convert_video(req: VideoRequest):
     try:
         video_id = extract_video_id(req.url)
 
-        # 1. Fetch transcript from YouTube directly
+        # 1. Fetch transcript directly from YouTube
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
         try:
             transcript = transcript_list.find_transcript(['hi', 'en', 'hi-IN', 'en-IN'])
@@ -58,15 +58,15 @@ async def convert_video(req: VideoRequest):
         if not transcript_text.strip():
             return {"status": "error", "message": "Could not extract transcript from video."}
 
-        # 2. Pass real transcript to Gemini
+        # 2. Call Gemini 3.6 Flash using the transcript text
         client = genai.Client(api_key=api_key)
         prompt = f"""
-        Analyze this video transcript and generate detailed, accurate study notes in language: {req.language}.
+        Analyze this video transcript and generate detailed study notes in language: {req.language}.
         Output valid JSON ONLY matching this exact structure:
         {{
           "title": "Main Title summarizing video subject",
           "sec1Title": "1. Key Topic Heading",
-          "sec1Body": "Detailed summary explaining the exact facts and announcements made in the transcript.",
+          "sec1Body": "Detailed summary explaining the facts and announcements from the video.",
           "points": ["Key Point 1", "Key Point 2", "Key Point 3"],
           "aiInsight": "Smart AI Tip or Summary based on the transcript",
           "diagramLabels": ["Concept 1", "Process 2", "Outcome 3"]
@@ -75,7 +75,7 @@ async def convert_video(req: VideoRequest):
         """
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=prompt,
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
