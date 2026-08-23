@@ -4,7 +4,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google import genai
-from google.genai import types
 
 app = FastAPI()
 
@@ -45,16 +44,8 @@ async def convert_video(req: VideoRequest):
         client = genai.Client(api_key=api_key)
         clean_url = normalize_youtube_url(req.url)
 
-        # YouTube URI requires explicit mime_type="video/mp4"
-        video_part = types.Part(
-            file_data=types.FileData(
-                file_uri=clean_url,
-                mime_type="video/mp4"
-            )
-        )
-
-        prompt_part = types.Part(text=f"""
-        Analyze this YouTube video and generate structured study notes in language: {req.language}.
+        prompt = f"""
+        Analyze this YouTube video ({clean_url}) and generate structured study notes in language: {req.language}.
         Output valid JSON ONLY matching this exact structure:
         {{
           "title": "Main Title of Video",
@@ -64,12 +55,12 @@ async def convert_video(req: VideoRequest):
           "aiInsight": "Smart AI Insight or Exam Tip based on this video",
           "diagramLabels": ["Concept 1", "Process 2", "Outcome 3"]
         }}
-        """)
+        """
 
+        # Updated model target to gemini-3.6-flash
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=types.Content(parts=[video_part, prompt_part]),
-            config=types.GenerateContentConfig(response_mime_type="application/json")
+            model="gemini-3.6-flash",
+            contents=prompt,
         )
 
         return {"status": "success", "data": response.text}
