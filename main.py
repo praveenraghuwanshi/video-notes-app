@@ -1,8 +1,8 @@
 import os
-from fastapi import FastAPI, HTTPException
+import re
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from youtube_transcript_api import YouTubeTranscriptApi
 from google import genai
 from google.genai import types
 
@@ -20,14 +20,16 @@ class VideoRequest(BaseModel):
     url: str
     language: str = "en"
 
-def extract_video_id(url: str) -> str:
-    if "v=" in url:
-        return url.split("v=")[1].split("&")[0]
-    elif "youtu.be/" in url:
-        return url.split("youtu.be/")[1].split("?")[0]
-    elif "live/" in url:
-        return url.split("live/")[1].split("?")[0]
-    return url
+def normalize_youtube_url(url: str) -> str:
+    patterns = [
+        r'(?:v=|\/live\/|\/v\/|youtu\.be\/|\/embed\/)([^"&?\/\s]{11})',
+        r'^([^"&?\/\s]{11})$'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return f"https://www.youtube.com/watch?v={match.group(1)}"
+    return url.strip()
 
 @app.get("/")
 def home():
@@ -37,42 +39,42 @@ def home():
 async def convert_video(req: VideoRequest):
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY missing in Railway variables.")
-
-    client = genai.Client(api_key=api_key)
+        return {"status": "error", "message": "GEMINI_API_KEY missing in Railway variables."}
 
     try:
-        # 1. Extract Video ID & Fetch Transcript Directly
-        video_id = extract_video_id(req.url)
-        
-        # Try fetching transcript in Hindi, English, or auto-generated
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi', 'en-IN'])
-        transcript_text = " ".join([t['text'] for t in transcript_list])
+        client = genai.Client(api_key=api_key)
+        clean_url = normalize_youtube_url(req.url)
 
-        # 2. Prompt Gemini AI
-        prompt = f"""
-        Analyze this video transcript and generate structured study notes in language: {req.language}.
+        # YouTube URI requires explicit mime_type="video/mp4"
+        video_part = types.Part(
+            file_data=types.FileData(
+                file_uri=clean_url,
+                mime_type="video/mp4"
+            )
+        )
+
+        prompt_part = types.Part(text=f"""
+        Analyze this YouTube video and generate structured study notes in language: {req.language}.
         Output valid JSON ONLY matching this exact structure:
         {{
-          "title": "Main Title",
-          "sec1Title": "1. Section Heading",
-          "sec1Body": "Detailed text summary of key concepts explained in the video",
-          "points": ["Key Point 1", "Key Point 2", "Key Point 3"],
-          "aiInsight": "AI Extra Context or Smart Tip",
-          "diagramLabels": ["Label 1", "Label 2", "Label 3"]
+          "title": "Main Title of Video",
+          "sec1Title": "1. Main Topic Heading",
+          "sec1Body": "Detailed summary explaining core concepts presented in the video.",
+          "points": ["Key Takeaway 1", "Key Takeaway 2", "Key Takeaway 3"],
+          "aiInsight": "Smart AI Insight or Exam Tip based on this video",
+          "diagramLabels": ["Concept 1", "Process 2", "Outcome 3"]
         }}
-        Transcript: {transcript_text[:15000]}
-        """
+        """)
 
         response = client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=prompt,
+            contents=types.Content(parts=[video_part, prompt_part]),
             config=types.GenerateContentConfig(response_mime_type="application/json")
         )
 
         return {"status": "success", "data": response.text}
 
     except Exception as e:
-        print(f"ERROR: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Transcript Error: {str(e)}")
+        print(f"BACKEND ERROR: {str(e)}")
+        return {"status": "error", "message": f"Gemini Error: {str(e)}"}
         
