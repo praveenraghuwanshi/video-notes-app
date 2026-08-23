@@ -3,7 +3,9 @@ import re
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from youtube_transcript_api import YouTubeTranscriptApi
 from google import genai
+from google.genai import types
 
 app = FastAPI()
 
@@ -19,7 +21,7 @@ class VideoRequest(BaseModel):
     url: str
     language: str = "en"
 
-def normalize_youtube_url(url: str) -> str:
+def extract_video_id(url: str) -> str:
     patterns = [
         r'(?:v=|\/live\/|\/v\/|youtu\.be\/|\/embed\/)([^"&?\/\s]{11})',
         r'^([^"&?\/\s]{11})$'
@@ -27,7 +29,7 @@ def normalize_youtube_url(url: str) -> str:
     for pattern in patterns:
         match = re.search(pattern, url)
         if match:
-            return f"https://www.youtube.com/watch?v={match.group(1)}"
+            return match.group(1)
     return url.strip()
 
 @app.get("/")
@@ -41,31 +43,46 @@ async def convert_video(req: VideoRequest):
         return {"status": "error", "message": "GEMINI_API_KEY missing in Railway variables."}
 
     try:
-        client = genai.Client(api_key=api_key)
-        clean_url = normalize_youtube_url(req.url)
+        video_id = extract_video_id(req.url)
 
+        # 1. Fetch transcript from YouTube directly
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        try:
+            transcript = transcript_list.find_transcript(['hi', 'en', 'hi-IN', 'en-IN'])
+        except Exception:
+            transcript = transcript_list.find_transcript([])
+
+        fetched_data = transcript.fetch()
+        transcript_text = " ".join([t['text'] for t in fetched_data])
+
+        if not transcript_text.strip():
+            return {"status": "error", "message": "Could not extract transcript from video."}
+
+        # 2. Pass real transcript to Gemini
+        client = genai.Client(api_key=api_key)
         prompt = f"""
-        Analyze this YouTube video ({clean_url}) and generate structured study notes in language: {req.language}.
+        Analyze this video transcript and generate detailed, accurate study notes in language: {req.language}.
         Output valid JSON ONLY matching this exact structure:
         {{
-          "title": "Main Title of Video",
-          "sec1Title": "1. Main Topic Heading",
-          "sec1Body": "Detailed summary explaining core concepts presented in the video.",
-          "points": ["Key Takeaway 1", "Key Takeaway 2", "Key Takeaway 3"],
-          "aiInsight": "Smart AI Insight or Exam Tip based on this video",
+          "title": "Main Title summarizing video subject",
+          "sec1Title": "1. Key Topic Heading",
+          "sec1Body": "Detailed summary explaining the exact facts and announcements made in the transcript.",
+          "points": ["Key Point 1", "Key Point 2", "Key Point 3"],
+          "aiInsight": "Smart AI Tip or Summary based on the transcript",
           "diagramLabels": ["Concept 1", "Process 2", "Outcome 3"]
         }}
+        Transcript: {transcript_text[:15000]}
         """
 
-        # Updated model target to gemini-3.6-flash
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-2.5-flash",
             contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
         )
 
         return {"status": "success", "data": response.text}
 
     except Exception as e:
         print(f"BACKEND ERROR: {str(e)}")
-        return {"status": "error", "message": f"Gemini Error: {str(e)}"}
+        return {"status": "error", "message": f"Error: {str(e)}"}
         
